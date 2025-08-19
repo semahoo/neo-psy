@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>پلتفرم نئو-سای (نسخه ۱۴.۰)</title>
+    <title>پلتفرم نئو-سای (نسخه ۱۵.۰)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -61,6 +61,7 @@
             </header>
             <main class="bg-white p-6 sm:p-8 rounded-2xl shadow-lg border border-gray-200">
                 <h2 class="text-2xl font-bold mb-4 text-gray-900">به "نئو-سای" خوش آمدید!</h2>
+                <p id="welcome-error" class="text-red-500 text-sm mb-4"></p>
                 <p class="text-gray-600 mb-6 leading-relaxed">
                    برای شروع ارزیابی شخصیت خود، لطفاً وارد حساب کاربری خود شوید یا یک حساب جدید بسازید.
                 </p>
@@ -371,67 +372,68 @@
 
         async function setupAuthListener() {
             supabaseClient.auth.onAuthStateChange(async (event, session) => {
-                const user = session?.user;
+                try {
+                    const user = session?.user;
 
-                if (user) {
-                    let { data: profile, error } = await supabaseClient
-                        .from('profiles')
-                        .select('*')
-                        .eq('id', user.id)
-                        .single();
-
-                    if (error && error.code === 'PGRST116') { // Profile not found
-                        console.log("Profile not found, creating one...");
-                        
-                        const meta = user.user_metadata;
-                        const [firstname, ...lastnameParts] = (meta.full_name || '').split(' ');
-                        const lastname = lastnameParts.join(' ');
-
-                        const profileData = {
-                            id: user.id,
-                            email: user.email,
-                            firstname: meta.firstname || firstname || '',
-                            lastname: meta.lastname || lastname || '',
-                            age: meta.age || null,
-                            gender: meta.gender || null
-                        };
-
-                        const { data: newProfile, error: insertError } = await supabaseClient
+                    if (user) {
+                        let { data: profile, error } = await supabaseClient
                             .from('profiles')
-                            .insert(profileData)
-                            .select()
+                            .select('*')
+                            .eq('id', user.id)
                             .single();
-                        
-                        if (insertError) {
-                            console.error("Error creating profile:", insertError);
-                            await supabaseClient.auth.signOut();
-                            return;
+
+                        if (error && error.code === 'PGRST116') { // Profile not found
+                            console.log("Profile not found, creating one...");
+                            
+                            const meta = user.user_metadata;
+                            const [firstname, ...lastnameParts] = (meta.full_name || '').split(' ');
+                            const lastname = lastnameParts.join(' ');
+
+                            const profileData = {
+                                id: user.id,
+                                email: user.email,
+                                firstname: meta.firstname || firstname || '',
+                                lastname: meta.lastname || lastname || '',
+                                age: meta.age || null,
+                                gender: meta.gender || null
+                            };
+
+                            const { data: newProfile, error: insertError } = await supabaseClient
+                                .from('profiles')
+                                .insert(profileData)
+                                .select()
+                                .single();
+                            
+                            if (insertError) throw insertError;
+                            profile = newProfile;
+                        } else if (error) {
+                            throw error;
                         }
-                        profile = newProfile;
-                    } else if (error) {
-                        console.error("Error fetching profile:", error);
-                        await supabaseClient.auth.signOut();
-                        return;
-                    }
-                    
-                    currentUser = profile;
-                    
-                    const { data: results, error: resultsError } = await supabaseClient
-                        .from('results')
-                        .select('*')
-                        .eq('user_id', currentUser.id)
-                        .order('completed_at', { ascending: false });
+                        
+                        currentUser = profile;
+                        
+                        const { data: results, error: resultsError } = await supabaseClient
+                            .from('results')
+                            .select('*')
+                            .eq('user_id', currentUser.id)
+                            .order('completed_at', { ascending: false });
 
-                    if (resultsError) throw resultsError;
+                        if (resultsError) throw resultsError;
 
-                    if (results && results.length > 0) {
-                        const latestTest = results[0];
-                        displayResults(latestTest.scores, latestTest.ai_analysis, latestTest.id);
+                        if (results && results.length > 0) {
+                            const latestTest = results[0];
+                            displayResults(latestTest.scores, latestTest.ai_analysis, latestTest.id);
+                        } else {
+                            startTest();
+                        }
                     } else {
-                        startTest();
+                        currentUser = null;
+                        showScreen('welcome-screen');
                     }
-                } else {
-                    currentUser = null;
+                } catch (error) {
+                    console.error("Critical error in auth state change:", error);
+                    document.getElementById('welcome-error').textContent = "خطا در بازیابی جلسه. لطفاً دوباره وارد شوید.";
+                    await supabaseClient.auth.signOut();
                     showScreen('welcome-screen');
                 }
             });
