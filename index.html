@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>پلتفرم نئو-سای (نسخه ۱۳.۰)</title>
+    <title>پلتفرم نئو-سای (نسخه ۱۴.۰)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -259,8 +259,17 @@
         <div id="api-key-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4 z-50">
             <div class="bg-white p-6 rounded-2xl shadow-lg w-full max-w-md fade-in">
                  <h3 class="text-xl font-bold mb-4">تنظیم کلید API هوش مصنوعی</h3>
-                 <p class="text-gray-600 mb-4 text-sm">برای استفاده از تحلیل هوشمند، کلید API خود را از <a href="https://platform.openai.com/api-keys" target="_blank" class="text-teal-600 hover:underline">OpenAI</a> دریافت کرده و در کادر زیر وارد کنید. این کلید فقط در مرورگر شما ذخیره می‌شود.</p>
-                 <input id="api-key-input" type="password" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="کلید API خود را اینجا وارد کنید...">
+                 <p class="text-gray-600 mb-4 text-sm">برای استفاده از تحلیل هوشمند، کلید API خود را از <a href="https://platform.openai.com/api-keys" target="_blank" class="text-teal-600 hover:underline">OpenAI</a> دریافت کرده و در کادر زیر وارد کنید.</p>
+                 <div class="space-y-4">
+                    <div>
+                        <label class="text-sm text-gray-500">کلید API</label>
+                        <input id="api-key-input" type="password" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="sk-...">
+                    </div>
+                    <div>
+                        <label class="text-sm text-gray-500">هاست API (اختیاری)</label>
+                        <input id="api-host-input" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="https://api.openai.com">
+                    </div>
+                 </div>
                  <p id="api-key-error" class="text-red-500 text-sm mt-2 h-4"></p>
                  <div class="flex gap-4 mt-4">
                     <button id="save-api-key-button" onclick="saveApiKeyAndRetryAnalysis()" class="w-full bg-teal-600 text-white font-bold py-2 rounded-lg hover:bg-teal-700">ذخیره و تلاش مجدد</button>
@@ -576,7 +585,7 @@
             showScreen('analyzing-screen');
             const scores = calculateScores();
             
-            const apiKey = localStorage.getItem('geminiApiKey');
+            const apiKey = localStorage.getItem('openaiApiKey');
             if (!apiKey) {
                 document.getElementById('api-key-modal').classList.remove('hidden');
                 await saveResults(scores, {});
@@ -611,12 +620,14 @@
         }
 
         async function getAIAnalysis(scores) {
-            const apiKey = localStorage.getItem('geminiApiKey');
+            const apiKey = localStorage.getItem('openaiApiKey');
+            const apiHost = localStorage.getItem('openaiApiHost') || 'https://api.openai.com';
+            
             if (!apiKey) {
                  return { analysis: {}, errorMessage: "کلید API برای هوش مصنوعی تنظیم نشده است." };
             }
 
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+            const apiUrl = `${apiHost}/v1/chat/completions`;
             const prompt = `You are a professional psychologist analyzing a user's Big Five personality scores. Provide a comprehensive, structured analysis in Persian. The response MUST be a valid JSON object with the following structure:
                 {
                   "generalSummary": "A holistic paragraph summarizing the user's overall personality profile based on the interaction of their traits.",
@@ -640,21 +651,31 @@
                 Use a supportive and insightful tone. Scores are out of 100.
                 Scores: N: ${scores.N}, E: ${scores.E}, O: ${scores.O}, A: ${scores.A}, C: ${scores.C}`;
             
-            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } };
+            const payload = {
+                model: "gpt-4o-mini",
+                messages: [{ role: "user", content: prompt }],
+                response_format: { type: "json_object" }
+            };
             
             try {
-                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const response = await fetch(apiUrl, { 
+                    method: 'POST', 
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    }, 
+                    body: JSON.stringify(payload) 
+                });
                 
+                const result = await response.json();
+
                 if (!response.ok) {
-                    const errorBody = await response.json();
-                    console.error("API Error Response:", errorBody);
-                    const detail = errorBody.error?.message || `وضعیت ${response.status}`;
+                    console.error("API Error Response:", result);
+                    const detail = result.error?.message || `وضعیت ${response.status}`;
                     return { analysis: {}, errorMessage: `خطا از سرور هوش مصنوعی: ${detail}` };
                 }
                 
-                const result = await response.json();
-                const textResponse = result.candidates[0].content.parts[0].text;
-                const analysis = JSON.parse(textResponse);
+                const analysis = JSON.parse(result.choices[0].message.content);
                 return { analysis, errorMessage: null };
 
             } catch (error) {
@@ -862,7 +883,9 @@
         
         window.saveApiKeyAndRetryAnalysis = async () => {
             const apiKeyInput = document.getElementById('api-key-input');
+            const apiHostInput = document.getElementById('api-host-input');
             const apiKey = apiKeyInput.value.trim();
+            const apiHost = apiHostInput.value.trim();
             const errorEl = document.getElementById('api-key-error');
 
             if (!apiKey) {
@@ -870,7 +893,8 @@
                 return;
             }
             errorEl.textContent = '';
-            localStorage.setItem('geminiApiKey', apiKey);
+            localStorage.setItem('openaiApiKey', apiKey);
+            localStorage.setItem('openaiApiHost', apiHost); // Save host even if empty
             document.getElementById('api-key-modal').classList.add('hidden');
             
             showScreen('analyzing-screen');
