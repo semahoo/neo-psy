@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>پلتفرم نئو-سای (نسخه ۱۶.۰)</title>
+    <title>پلتفرم نئو-سای (نسخه ۱۷.۰)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -251,35 +251,11 @@
                 <h3 class="text-xl font-bold mb-4">ابزارها</h3>
                 <div class="flex flex-col sm:flex-row gap-4">
                      <button id="pdf-button" class="w-full sm:w-auto flex-1 bg-blue-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700 transition-colors">دانلود گزارش PDF</button>
-                     <button onclick="document.getElementById('api-key-modal').classList.remove('hidden')" class="w-full sm:w-auto flex-1 bg-gray-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-gray-700 transition-colors">تنظیمات هوش مصنوعی</button>
                      <button onclick="document.getElementById('feedback-modal').classList.remove('hidden')" class="w-full sm:w-auto flex-1 bg-gray-200 text-gray-800 font-bold py-3 px-8 rounded-lg hover:bg-gray-300 transition-colors">ارسال بازخورد</button>
                 </div>
             </div>
         </div>
         
-        <!-- API Key Modal -->
-        <div id="api-key-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4 z-50">
-            <div class="bg-white p-6 rounded-2xl shadow-lg w-full max-w-md fade-in">
-                 <h3 class="text-xl font-bold mb-4">تنظیم کلید API هوش مصنوعی</h3>
-                 <p class="text-gray-600 mb-4 text-sm">برای استفاده از تحلیل هوشمند، کلید API خود را از <a href="https://platform.openai.com/api-keys" target="_blank" class="text-teal-600 hover:underline">OpenAI</a> دریافت کرده و در کادر زیر وارد کنید.</p>
-                 <div class="space-y-4">
-                    <div>
-                        <label class="text-sm text-gray-500">کلید API</label>
-                        <input id="api-key-input" type="password" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="sk-...">
-                    </div>
-                    <div>
-                        <label class="text-sm text-gray-500">هاست API (اختیاری)</label>
-                        <input id="api-host-input" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="https://api.openai.com">
-                    </div>
-                 </div>
-                 <p id="api-key-error" class="text-red-500 text-sm mt-2 h-4"></p>
-                 <div class="flex gap-4 mt-4">
-                    <button id="save-api-key-button" onclick="saveApiKeyAndRetryAnalysis()" class="w-full bg-teal-600 text-white font-bold py-2 rounded-lg hover:bg-teal-700">ذخیره و تلاش مجدد</button>
-                    <button onclick="document.getElementById('api-key-modal').classList.add('hidden')" class="w-full bg-gray-200 text-gray-800 font-bold py-2 rounded-lg hover:bg-gray-300">انصراف</button>
-                 </div>
-            </div>
-        </div>
-
         <!-- Feedback Modal -->
         <div id="feedback-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4 z-50">
             <div class="bg-white p-6 rounded-2xl shadow-lg w-full max-w-md fade-in">
@@ -313,6 +289,12 @@
         let currentDisplayedTest = null;
         let analysisController; // AbortController for AI fetch
         
+        // =================== توجه مهم ===================
+        // کلید API و آدرس هاست خود را در اینجا قرار دهید
+        const OPENAI_API_KEY = 'YOUR_OPENAI_API_KEY';
+        const OPENAI_API_HOST = 'YOUR_API_HOST'; // e.g., 'https://api.chatanywhere.tech'
+        // ===============================================
+
         // --- NEO-FFI 60 Questions ---
         const questions = [
             { text: "من آدم نگرانی نیستم.", trait: "N", R: true }, { text: "من به ندرت احساس ترس یا اضطراب می‌کنم.", trait: "N", R: true }, { text: "من اغلب احساس می‌کنم که در آستانه فروپاشی هستم.", trait: "N" }, { text: "من به ندرت احساس تنهایی یا غم می‌کنم.", trait: "N", R: true }, { text: "من اغلب عصبانی و خشمگین می‌شوم.", trait: "N" }, { text: "من اغلب احساس درماندگی می‌کنم و دلم می‌خواهد کسی مشکلاتم را حل کند.", trait: "N" }, { text: "من فردی آرام و خونسرد هستم.", trait: "N", R: true }, { text: "وقتی تحت فشار زیاد هستم، گاهی احساس می‌کنم دارم از هم می‌پاشم.", trait: "N" }, { text: "من به ندرت احساس خجالت یا دستپاچگی می‌کنم.", trait: "N", R: true }, { text: "من خیلی هیجانی هستم و احساساتم به راحتی جریحه‌دار می‌شود.", trait: "N" }, { text: "من اغلب از نحوه برخورد دیگران با خودم ناراحت می‌شوم.", trait: "N" }, { text: "من در برابر استرس آسیب‌پذیر هستم.", trait: "N" }, { text: "من از صحبت کردن با مردم لذت می‌برم.", trait: "E" }, { text: "من دوست دارم افراد زیادی دور و برم باشند.", trait: "E" }, { text: "من واقعاً از بودن در کنار دیگران لذت می‌برم.", trait: "E" }, { text: "من در جمع‌ها خودم را کنار می‌کشم.", trait: "E", R: true }, { text: "من در مهمانی‌ها و گردهمایی‌ها زیاد حرف نمی‌زنم.", trait: "E", R: true }, { text: "من دوست ندارم در مرکز توجه باشم.", trait: "E", R: true }, { text: "من آدم بشاش و سرحالی هستم.", trait: "E" }, { text: "من دوست دارم کارها را با دیگران انجام دهم تا به تنهایی.", trait: "E" }, { text: "من آدم شادی هستم.", trait: "E" }, { text: "من دوست دارم همیشه مشغول باشم و کارهای زیادی برای انجام دادن داشته باشم.", trait: "E" }, { text: "من به راحتی با دیگران دوست می‌شوم.", trait: "E" }, { text: "من همیشه مشتاقانه به دنبال هیجان هستم.", trait: "E" }, { text: "من تخیل بسیار فعالی دارم.", trait: "O" }, { text: "من سعی می‌کنم تمام افکارم را بر اساس واقعیت قرار دهم و از خیال‌پردازی دوری کنم.", trait: "O", R: true }, { text: "من علاقه‌ای به بحث‌های نظری یا انتزاعی ندارم.", trait: "O", R: true }, { text: "من از حل مسائل پیچیده و معماها لذت می‌برم.", trait: "O" }, { text: "زیبایی در هنر و طبیعت برای من اهمیت زیادی دارد.", trait: "O" }, { text: "من کنجکاو هستم و دوست دارم چیزهای جدید یاد بگیرم.", trait: "O" }, { text: "من ایده‌های جدید و غیرمتعارف را جالب می‌دانم.", trait: "O" }, { text: "من احساسات و عواطف خودم را به خوبی می‌شناسم.", trait: "O" }, { text: "من معتقدم که باید در مورد مسائل اخلاقی انعطاف‌پذیر بود.", trait: "O" }, { text: "من ترجیح می‌دهم کارهایم را به روش‌های آشنا و همیشگی انجام دهم.", trait: "O", R: true }, { text: "من از بازدید از موزه‌های هنری لذت می‌برم.", trait: "O" }, { text: "من اغلب از غذاهای جدید و خارجی امتحان می‌کنم.", trait: "O" }, { text: "من سعی می‌کنم با دیگران مهربان باشم.", trait: "A" }, { text: "من فکر می‌کنم اکثر مردم اساساً نیت خوبی دارند.", trait: "A" }, { text: "من به دیگران اعتماد دارم.", trait: "A" }, { text: "من تمایل دارم نسبت به دیگران بدبین و شکاک باشم.", trait: "A", R: true }, { text: "من به ندرت با دیگران جر و بحث می‌کنم.", trait: "A" }, { text: "گاهی اوقات دیگران را فریب می‌دهم تا به خواسته‌هایم برسم.", trait: "A", R: true }, { text: "من آدم سرسختی نیستم و به راحتی کوتاه می‌آیم.", trait: "A" }, { text: "من از همکاری با دیگران لذت می‌برم.", trait: "A" }, { text: "من می‌توانم تندخو و تحریک‌پذیر باشم.", trait: "A", R: true }, { text: "من برای دیگران دلسوزی می‌کنم.", trait: "A" }, { text: "برخی فکر می‌کنند من خودخواه و مغرور هستم.", trait: "A", R: true }, { text: "من ترجیح می‌دهم با دیگران رقابت کنم تا همکاری.", trait: "A", R: true }, { text: "من آدم منظمی هستم و دوست دارم همه چیز مرتب باشد.", trait: "C" }, { text: "من اغلب وسایلم را گم می‌کنم یا جایشان را فراموش می‌کنم.", trait: "C", R: true }, { text: "من سخت‌کوش و با پشتکار هستم.", trait: "C" }, { text: "من گاهی آنقدر که باید قابل اعتماد و مسئولیت‌پذیر نیستم.", trait: "C", R: true }, { text: "من فردی بسیار منضبط هستم.", trait: "C" }, { text: "من در شروع کارها مشکل دارم.", trait: "C", R: true }, { text: "من همیشه وظایفم را به موقع انجام می‌دهم.", trait: "C" }, { text: "من اهداف روشنی دارم و برای رسیدن به آنها به طور منظم تلاش می‌کنم.", trait: "C" }, { text: "من در تصمیم‌گیری‌ها محتاط و دقیق هستم.", trait: "C" }, { text: "من بدون فکر عمل می‌کنم.", trait: "C", R: true }, { text: "من به توانایی‌هایم برای انجام موفقیت‌آمیز کارها اطمینان دارم.", trait: "C" }, { text: "من کارهایم را نیمه‌کاره رها می‌کنم.", trait: "C", R: true }
@@ -589,15 +571,6 @@
             showScreen('analyzing-screen');
             const scores = calculateScores();
             
-            const apiKey = localStorage.getItem('openaiApiKey');
-            if (!apiKey) {
-                document.getElementById('api-key-modal').classList.remove('hidden');
-                await saveResults(scores, {});
-                const latestTest = await getLatestTest();
-                displayResults(latestTest.scores, {}, latestTest.id, "برای تحلیل هوشمند، لطفاً کلید API خود را وارد کنید.");
-                return;
-            }
-
             const aiResult = await getAIAnalysis(scores);
             await saveResults(scores, aiResult.analysis);
             const latestTest = await getLatestTest();
@@ -624,11 +597,11 @@
         }
 
         async function getAIAnalysis(scores) {
-            const apiKey = localStorage.getItem('openaiApiKey');
-            const apiHost = localStorage.getItem('openaiApiHost') || 'https://api.openai.com';
+            const apiKey = OPENAI_API_KEY;
+            const apiHost = OPENAI_API_HOST || 'https://api.openai.com';
             
-            if (!apiKey) {
-                 return { analysis: {}, errorMessage: "کلید API برای هوش مصنوعی تنظیم نشده است." };
+            if (!apiKey || apiKey === 'YOUR_OPENAI_API_KEY') {
+                 return { analysis: {}, errorMessage: "کلید API برای هوش مصنوعی در کد برنامه تنظیم نشده است." };
             }
 
             analysisController = new AbortController();
