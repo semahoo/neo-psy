@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>پلتفرم نئو-سای (نسخه ۱۵.۰)</title>
+    <title>پلتفرم نئو-سای (نسخه ۱۶.۰)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -144,6 +144,7 @@
             </div>
             <h2 class="text-2xl font-bold text-gray-800">در حال تحلیل نتایج...</h2>
             <p class="text-gray-500 mt-2">موتور هوش مصنوعی ما در حال آماده‌سازی گزارش شخصی شماست. این ممکن است چند لحظه طول بکشد.</p>
+            <button onclick="cancelAnalysis()" class="mt-4 text-sm text-gray-500 hover:underline">لغو</button>
         </div>
 
         <!-- Profile Screen -->
@@ -310,6 +311,7 @@
         let currentQuestionIndex = 0;
         let resultsChartInstance = null;
         let currentDisplayedTest = null;
+        let analysisController; // AbortController for AI fetch
         
         // --- NEO-FFI 60 Questions ---
         const questions = [
@@ -629,6 +631,9 @@
                  return { analysis: {}, errorMessage: "کلید API برای هوش مصنوعی تنظیم نشده است." };
             }
 
+            analysisController = new AbortController();
+            const timeoutId = setTimeout(() => analysisController.abort(), 30000); // 30-second timeout
+
             const apiUrl = `${apiHost}/v1/chat/completions`;
             const prompt = `You are a professional psychologist analyzing a user's Big Five personality scores. Provide a comprehensive, structured analysis in Persian. The response MUST be a valid JSON object with the following structure:
                 {
@@ -666,9 +671,11 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${apiKey}`
                     }, 
-                    body: JSON.stringify(payload) 
+                    body: JSON.stringify(payload),
+                    signal: analysisController.signal
                 });
                 
+                clearTimeout(timeoutId);
                 const result = await response.json();
 
                 if (!response.ok) {
@@ -681,7 +688,11 @@
                 return { analysis, errorMessage: null };
 
             } catch (error) {
+                clearTimeout(timeoutId);
                 console.error("Fetch/AI analysis failed:", error);
+                if (error.name === 'AbortError') {
+                    return { analysis: {}, errorMessage: "پاسخی از سرور هوش مصنوعی دریافت نشد (Timeout). لطفاً اتصال و آدرس هاست را بررسی کنید." };
+                }
                 let message = "خطای شبکه یا CORS. لطفاً اتصال اینترنت و کنسول مرورگر را بررسی کنید.";
                 if (error instanceof TypeError) {
                     message = "خطای شبکه یا محدودیت مرورگر (CORS). لطفاً اتصال اینترنت خود را بررسی کنید.";
@@ -689,6 +700,19 @@
                 return { analysis: {}, errorMessage: message };
             }
         }
+        
+        window.cancelAnalysis = async () => {
+            if (analysisController) {
+                analysisController.abort();
+            }
+            // We still need to show the results page without the analysis
+            const latestTest = await getLatestTest();
+            if (latestTest) {
+                displayResults(latestTest.scores, latestTest.ai_analysis, latestTest.id, "عملیات تحلیل توسط کاربر لغو شد.");
+            } else {
+                showScreen('welcome-screen');
+            }
+        };
 
 
         async function saveResults(scores, aiAnalysis) {
@@ -711,7 +735,10 @@
                 .order('completed_at', { ascending: false })
                 .limit(1)
                 .single();
-            if (error) throw error;
+            if (error) {
+                console.error("Could not get latest test:", error);
+                return null;
+            }
             return data;
         }
 
@@ -1020,7 +1047,7 @@
         };
 
         // --- INITIALIZATION ---
-        window.showScreen = showScreen; window.loginUser = loginUser; window.registerUser = registerUser; window.logoutUser = logoutUser; window.startTest = startTest; window.selectAnswer = selectAnswer; window.nextQuestion = nextQuestion; window.submitFeedback = submitFeedback; window.loadSpecificTest = loadSpecificTest; window.saveApiKeyAndRetryAnalysis = saveApiKeyAndRetryAnalysis; window.showProfile = showProfile; window.changeTab = changeTab; window.toggleProfileEdit = toggleProfileEdit; window.saveProfile = saveProfile; window.signInWithGoogle = signInWithGoogle;
+        window.showScreen = showScreen; window.loginUser = loginUser; window.registerUser = registerUser; window.logoutUser = logoutUser; window.startTest = startTest; window.selectAnswer = selectAnswer; window.nextQuestion = nextQuestion; window.submitFeedback = submitFeedback; window.loadSpecificTest = loadSpecificTest; window.saveApiKeyAndRetryAnalysis = saveApiKeyAndRetryAnalysis; window.showProfile = showProfile; window.changeTab = changeTab; window.toggleProfileEdit = toggleProfileEdit; window.saveProfile = saveProfile; window.signInWithGoogle = signInWithGoogle; window.cancelAnalysis = cancelAnalysis;
         document.addEventListener('DOMContentLoaded', initializeSupabase);
 
     </script>
